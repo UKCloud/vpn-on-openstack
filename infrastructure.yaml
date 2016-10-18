@@ -1,0 +1,98 @@
+heat_template_version: 2015-04-30
+
+parameters:
+  flavor:
+    type: string
+    description: Flavor to use for the jumpbox server
+    default: t1.small
+    constraints:
+      - custom_constraint: nova.flavor
+  image:
+    type: string
+    description: Image ID or image name to use for the jumpbox server
+    default: "CentOS 7"
+    constraints:
+      - custom_constraint: glance.image
+
+resources:
+  internal_net:
+    type: OS::Neutron::Net
+    properties:
+      admin_state_up: true
+      name: internal_net
+
+  internal_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      network: { get_resource: internal_net }
+      allocation_pools: [{"start": "192.168.1.20", "end": "192.168.1.200"}]
+      cidr: "192.168.1.0/24"
+      dns_nameservers: ["8.8.8.8"]
+      gateway_ip: "192.168.1.1"
+      ip_version: 4
+
+  InternetGW:
+    type: OS::Neutron::Router
+    properties:
+      external_gateway_info: { network: internet }
+      name: InternetGW
+
+  internal_gw:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router_id: { get_resource: InternetGW }
+      subnet: { get_resource: internal_subnet }
+
+  jumpbox_key:
+    type: OS::Nova::KeyPair
+    properties:
+      save_private_key: true
+      name: jumpbox_key
+
+  ssh_ext_secgroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - protocol: tcp
+          remote_ip_prefix: 0.0.0.0/0
+          port_range_min: 22
+          port_range_max: 22
+
+  jumpbox_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_resource: internal_net }
+      fixed_ips:
+        - subnet_id: { get_resource: internal_subnet }
+      security_groups:
+        - { get_resource: ssh_ext_secgroup }
+
+  jumpbox_server:
+    type: OS::Nova::Server
+    properties:
+      name: jump01
+      flavor: { get_param: flavor }
+      image: { get_param: image }
+      key_name: { get_resource: jumpbox_key }
+      networks:
+        - port: { get_resource: jumpbox_port }
+
+  jumpbox_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: "internet"
+
+  jumpbox_ip_assoc:
+    type: OS::Neutron::FloatingIPAssociation
+    properties:
+      floatingip_id: { get_resource: jumpbox_ip }
+      port_id: { get_resource: jumpbox_port }
+
+
+outputs:
+  private_key:
+    description: Private Key
+    value: { get_attr: [ jumpbox_key, private_key ]}
+  jumpbox_ip:
+    description: IP Address of the deployed Jumpbox instance
+    value: { get_attr: [ jumpbox_ip, floating_ip_address ]}    
