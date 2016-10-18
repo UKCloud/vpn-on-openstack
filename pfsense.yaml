@@ -1,0 +1,179 @@
+heat_template_version: 2015-10-15
+
+parameters:
+  key_name:
+    type: string
+    description: SSH Key Pair
+    constraints:
+      - custom_constraint: nova.keypair
+  pfsense_flavor:
+    type: string
+    description: Flavor for the server to be created
+    default: t1.tiny
+    constraints:
+      - custom_constraint: nova.flavor
+  pfsense_image:
+    type: string
+    description: Image ID or image name to use for the server
+    default: "pfSense 2.3.2 Appliance"
+    constraints:
+      - custom_constraint: glance.image
+  router:
+    type: string
+    description: Name of the router used to connect to the external network
+    default: InternetGW
+  external_network:
+    type: string
+    description: Name of the external network used for floating ip addresses
+    default: internet
+  internal_network:
+    type: string
+    description: Existing network to attach the VPN instance to.
+    default: Management
+    constraints:
+      - custom_constraint: neutron.network
+  internal_address:
+    type: string
+    description: Static address to assign to the VPN instance on the internal_network
+    default: 192.168.1.254
+  internal_net_cidr:
+    type: string
+    description: CIDR Network address for the protected network
+    default: "192.168.1.0/24"
+  remote_net_cidr:
+    type: string
+    description: CIDR Network address for the remote network at the other end of the VPN
+    default: "192.168.2.0/24"
+
+resources:
+  vpn_net:
+    type: OS::Neutron::Net
+    properties:
+      admin_state_up: true
+      name: vpn_net
+
+  vpn_subnet:
+    type: OS::Neutron::Subnet
+    properties:
+      name: vpn_subnet
+      network: { get_resource: vpn_net }
+      allocation_pools: [{"start": "172.16.1.20", "end": "172.16.1.200"}]
+      cidr: "172.16.1.0/24"
+      dns_nameservers: ["8.8.8.8"]
+      gateway_ip: "172.16.1.1"
+      ip_version: 4
+
+  vpn_gw:
+    type: OS::Neutron::RouterInterface
+    properties:
+      router: { get_param: router }
+      subnet: { get_resource: vpn_subnet }
+
+
+  pfsense_secgroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - protocol: tcp
+          remote_ip_prefix: { get_param: internal_net_cidr }
+          port_range_min: 22
+          port_range_max: 22
+        - protocol: tcp
+          remote_ip_prefix: { get_param: internal_net_cidr }
+          port_range_min: 80
+          port_range_max: 80
+        - protocol: tcp
+          remote_ip_prefix: { get_param: internal_net_cidr }
+          port_range_min: 443
+          port_range_max: 443
+        - protocol: icmp
+          remote_ip_prefix: { get_param: internal_net_cidr }
+
+  ipsec_secgroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - protocol: udp
+          remote_ip_prefix: 0.0.0.0/0
+          port_range_min: 500
+          port_range_max: 500
+        - protocol: udp
+          remote_ip_prefix: 0.0.0.0/0
+          port_range_min: 1701
+          port_range_max: 1701
+        - protocol: udp
+          remote_ip_prefix: 0.0.0.0/0
+          port_range_min: 4500
+          port_range_max: 4500
+        - protocol: icmp
+          remote_ip_prefix: 0.0.0.0/0
+
+  openvpn_secgroup:
+    type: OS::Neutron::SecurityGroup
+    properties:
+      rules:
+        - protocol: udp
+          remote_ip_prefix: 0.0.0.0/0
+          port_range_min: 1194
+          port_range_max: 1194
+        - protocol: icmp
+          remote_ip_prefix: 0.0.0.0/0
+
+  pfsense_ext_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_resource: vpn_net }
+      fixed_ips:
+        - subnet_id: { get_resource: vpn_subnet }
+      security_groups:
+        - { get_resource: pfsense_secgroup }
+        - { get_resource: ipsec_secgroup }
+        - { get_resource: openvpn_secgroup }
+
+  pfsense_int_port:
+    type: OS::Neutron::Port
+    properties:
+      network: { get_param: internal_network }
+      allowed_address_pairs:
+        - ip_address: { get_param: remote_net_cidr }
+      fixed_ips:
+        - ip_address: { get_param: internal_address}
+      security_groups:
+        - { get_resource: pfsense_secgroup }
+
+  pfsense_volume:
+    type: OS::Cinder::Volume
+    properties:
+      size: 20
+      image: { get_param: pfsense_image }
+
+  pfsense_server:
+    type: OS::Nova::Server
+    properties:
+      name: firewall01
+      flavor: { get_param: pfsense_flavor }
+      key_name: { get_param: key_name }
+      networks:
+        - port: { get_resource: pfsense_ext_port }
+        - port: { get_resource: pfsense_int_port }
+      block_device_mapping:
+        - device_name: vda
+          volume_id: { get_resource: pfsense_volume }
+          delete_on_termination: true
+
+  pfsense_ip:
+    type: OS::Neutron::FloatingIP
+    properties:
+      floating_network: { get_param: external_network }
+
+  pfsense_ip_assoc:
+    type: OS::Neutron::FloatingIPAssociation
+    properties:
+      floatingip_id: { get_resource: pfsense_ip }
+      port_id: { get_resource: pfsense_ext_port }
+
+
+outputs:
+  firewall_ip:
+    description: IP Address of the deployed Firewall / VPN instance
+    value: { get_attr: [ pfsense_ip, floating_ip_address ]}

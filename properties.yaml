@@ -1,0 +1,8 @@
+parameters:
+  key_name: MySSHkeypair
+  pfsense_flavor: t1.tiny
+  router: InternetGW
+  internal_network: Internal
+  internal_address: 192.168.1.254
+  internal_net_cidr: 192.168.1.0/24
+  remote_net_cidr: 10.1.1.0/24
