@@ -1,0 +1,32 @@
+Firewalls:
+  - Name: VPNDemo
+    Service:
+      IsEnabled: true
+    Creds:
+      User: 1234.5.678901
+      Password: SuperSecret
+      Org: 1-2-33-456789
+      Url: api.vcd.portal.skyscapecloud.com
+      Edge: nft00xxxxx-xxxxxx
+    GatewayIpsecVpnService:
+      IsEnabled: true
+      Tunnel:
+      - Name: openstack
+        IpsecVpnLocalPeerId:
+        IpsecVpnLocalPeerName:
+        PeerIpAddress: xxx.xxx.xxx.xxx
+        PeerId: xxx.xxx.xxx.xxx
+        LocalIpAddress: yyy.yyy.yyy.yyy
+        LocalId: yyy.yyy.yyy.yyy
+        LocalSubnet:
+        - Name: vCloudInternal
+          Gateway: 10.1.1.0
+          Netmask: 255.255.255.0
+        PeerSubnet:
+        - Name: OpenstackInternal
+          Gateway: 192.168.1.0
+          Netmask: 255.255.255.0
+        SharedSecret: D3v0psD3m0D3v0psD3m0D3v0psD3m0D3v0psD3m0
+        EncryptionProtocol: AES256
+        Mtu: 1400
+        IsEnabled: true
