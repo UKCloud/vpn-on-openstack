@@ -5,7 +5,19 @@ performing the task of a VPN endpoint, allowing secure connections to be made to
 vCloud Director VDCs, or back to your own infrastructure in-house.
 
 For instructions on how to use the OpenStack HEAT template to deploy a VPN endpoint, please see
-the instructions in the [wiki](https://github.com/UKCloud/vpn-on-openstack/wiki).
+the [documentation in the wiki](https://github.com/UKCloud/vpn-on-openstack/wiki).
+
+This repository contains the following:
+* pfsense.yaml
+  * A HEAT template to deploy all the resources needed for an IPsec VPN Endpoints
+* properties.yaml
+  * The HEAT parameters used with the pfsense.yaml template
+* infrastructure.yaml
+  * A sample HEAT template to deploy all the pre-requisit infrastructure used by the pfsense.yaml template
+* vshield-configuration.yaml
+  * A sample configuration to setup a vShield Edge as an IPsec endpoint on a VDC.
+* images
+  * Various screenshots and diagrams used by the wiki documentation.
 
 License and Authors
 -------------------
